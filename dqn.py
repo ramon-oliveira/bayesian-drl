@@ -90,7 +90,7 @@ if __name__ == '__main__':
     Q_target = model_from_yaml(Q.to_yaml())
     Q_target.set_weights(Q.get_weights())
 
-    e = 0 #e-greedy policy, drops from e=1 to e=0.1
+    e = 1 #e-greedy policy, drops from e=1 to e=0.1
     k = 4 #The agent sees and selects an action every kth frame
     m = 4 #Number of frames looked at each moment
     replay_size = 10000
