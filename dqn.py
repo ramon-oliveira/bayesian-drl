@@ -64,27 +64,21 @@ if __name__ == '__main__':
     ##Initialize action value function with random with random weights
     print("creating Q network")
     Q = Sequential()
-    Q.add(Convolution2D(32, 8, 8, border_mode='valid', input_shape=(4,84,84)))
-    Q.add(MaxPooling2D(pool_size=(4, 4)))
-    Q.add(Dropout(0.5))
+    Q.add(Convolution2D(32, 8, 8, border_mode='valid', subsample=[4, 4], input_shape=[4,84,84]))
     Q.add(Activation('relu'))
-    Q.add(Convolution2D(64, 4, 4, border_mode='valid'))
-    Q.add(MaxPooling2D(pool_size=(2, 2)))
-    Q.add(Dropout(0.5))
+    Q.add(Convolution2D(64, 4, 4, border_mode='valid', subsample=[2, 2]))
     Q.add(Activation('relu'))
-    Q.add(Convolution2D(64, 3, 3, border_mode='valid'))
-    Q.add(Dropout(0.5))
+    Q.add(Convolution2D(64, 3, 3, border_mode='valid', subsample=[1, 1]))
     Q.add(Activation('relu'))
     Q.add(Flatten())
     Q.add(Dense(512))
     Q.add(Activation('relu'))
     Q.add(Dense(6))
-    Q.add(Activation('tanh')) #aqui o certo e um htan
 
-    sgd = SGD()
     print("compiling Q network")
-    Q.compile(loss="mean_squared_error", optimizer=sgd)
+    Q.compile(loss="mse", optimizer='adadelta')
     Q.summary()
+
     ##Initialize target action-value function ^Q with same wieghts
     print("copying Q to Q_target")
     Q_target = model_from_yaml(Q.to_yaml())
@@ -96,20 +90,19 @@ if __name__ == '__main__':
     replay_size = 10000
     batch_size = 32
     gama = 0.99  #discount factor for future rewards Q function
-    C = 16
+    C = 10000
     render = False
 
     ##Populates replay memory with some random sequences
     print("populating memory")
-    populate_memory(env, D, size=100)
-
-    print("Starting to Train")
+    populate_memory(env, D, size=1000)
 
     S0 = np.zeros([batch_size, m, 84, 84])
     S1 = np.zeros([batch_size, m, 84, 84])
     A = np.zeros([batch_size], dtype=np.int)
     R = np.zeros([batch_size])
 
+    print("Starting to Train")
     ##Starts Playing and training
     for episodes in range(Max_ep):
         ##Initialize sequence game and sequence s1 pre-process sequence
@@ -119,7 +112,7 @@ if __name__ == '__main__':
         obs[0] = ob0
         State0 = preprocess(obs)
         treward = 0
-        pb = Progbar(1050)
+        pb = Progbar(5000)
         train_loss = 1e10
         for t in range(num_steps):
             if t%k==0:
@@ -163,7 +156,7 @@ if __name__ == '__main__':
 
             ##set e-greedy policy adjust
             if e > 0.1:
-                e -= 0.0000009
+                e -= 0.0009
 
             ##update Q_target every C trains
             if t and t%C==0:
@@ -171,10 +164,14 @@ if __name__ == '__main__':
 
             if render:
                 env.render()
-            if done:break;
-        # pb.update(num_steps, [['mse', train_loss]])
+
+            if done:
+                break
+
+        pb.target = t
+        pb.update(t, [['mse', train_loss]], force=True)
         Q.save_weights('tst.h5', overwrite=True)
-        print("Episode",episodes+1,"\tpoints =",treward,"\tframes",t+1)
-        print("\n")
+        print("\nEpisode", episodes+1, "\tpoints =", treward, "\tframes",t+1)
+        print("")
 
 
