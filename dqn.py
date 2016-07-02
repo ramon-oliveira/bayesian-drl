@@ -1,22 +1,25 @@
 import gym
 import numpy as np
-from skimage import color
-from skimage.transform import resize
 from keras.models import Sequential, model_from_yaml
-from keras.layers.core import Dense, Dropout, Activation, Flatten
-from keras.layers.convolutional import Convolution2D, MaxPooling2D
-from keras.optimizers import SGD, Adam, RMSprop
-from keras.utils import np_utils
+from keras.layers.core import Dense, Activation, Flatten
+from keras.layers.convolutional import Convolution2D
 from keras.callbacks import Progbar
-import time
 
-def preprocess(obs):
+def preprocess(obs, size=80):
     #max_frames = np.maximum.reduce(obs) #quantos frame???
-    xyz = color.rgb2xyz(obs)
-    y = xyz[:,:,:,1]
-    small = resize(y,(4,84,84))
-    state = small.reshape(1, 4, 84, 84)
-    return state
+    I = obs[:, 35:195]
+    I = I[:,::2, ::2, 0]
+    I[I == 144] = 0 # erase background (background type 1)
+    I[I == 109] = 0 # erase background (background type 2)
+    I[I != 0] = 1 # everything else (paddles, ball) just set to
+    #plt.imshow(I, cmap=plt.cm.binary)
+    return I.reshape([1, 4, size, size])
+    # y = np.zeros([len(obs), 110, size])
+    # for i in range(len(obs)):
+    #     y[i] = resize(color.rgb2grey(obs[i]), [110, size])
+    # y = y[:, 13:13+size]
+    # state = y.reshape(1, 4, size, size)
+    # return state/255
 
 def populate_memory(env, D, size=5000):
     n = len(D)
@@ -38,6 +41,7 @@ def populate_memory(env, D, size=5000):
             ##Set State' = ob and preprocess State'
             State1 = preprocess(obs)
             D.insert(0,[State0,action,reward,State1])
+            State0 = State1
             if len(D)>replay_size:
                 D.pop()
             if done:break;
@@ -57,6 +61,7 @@ if __name__ == '__main__':
     Total_Frames = 50000000
     Max_ep = 1000000
     num_steps = 5000
+    size = 80
     #Lets assume the following parameters are the same
 
     ##Initialize replay memory D to capacity N (1000000)
@@ -64,16 +69,15 @@ if __name__ == '__main__':
     ##Initialize action value function with random with random weights
     print("creating Q network")
     Q = Sequential()
-    Q.add(Convolution2D(32, 8, 8, border_mode='valid', subsample=[4, 4], input_shape=[4,84,84]))
+    Q.add(Convolution2D(32, 8, 8, border_mode='valid', subsample=[4, 4], input_shape=[4, size, size]))
     Q.add(Activation('relu'))
     Q.add(Convolution2D(64, 4, 4, border_mode='valid', subsample=[2, 2]))
     Q.add(Activation('relu'))
     Q.add(Convolution2D(64, 3, 3, border_mode='valid', subsample=[1, 1]))
     Q.add(Activation('relu'))
     Q.add(Flatten())
-    Q.add(Dense(512))
-    Q.add(Activation('relu'))
-    Q.add(Dense(6))
+    Q.add(Dense(512, activation='relu'))
+    Q.add(Dense(6, activation='linear', init='zero'))
 
     print("compiling Q network")
     Q.compile(loss="mse", optimizer='adadelta')
@@ -84,26 +88,27 @@ if __name__ == '__main__':
     Q_target = model_from_yaml(Q.to_yaml())
     Q_target.set_weights(Q.get_weights())
 
-    e = 1 #e-greedy policy, drops from e=1 to e=0.1
+    e = 1.0 #e-greedy policy, drops from e=1 to e=0.1
     k = 4 #The agent sees and selects an action every kth frame
     m = 4 #Number of frames looked at each moment
     replay_size = 10000
     batch_size = 32
     gama = 0.99  #discount factor for future rewards Q function
-    C = 10000
+    C = 5000
     render = False
 
     ##Populates replay memory with some random sequences
     print("populating memory")
-    populate_memory(env, D, size=1000)
+    populate_memory(env, D, size=5000)
 
-    S0 = np.zeros([batch_size, m, 84, 84])
-    S1 = np.zeros([batch_size, m, 84, 84])
+    S0 = np.zeros([batch_size, m, size, size])
+    S1 = np.zeros([batch_size, m, size, size])
     A = np.zeros([batch_size], dtype=np.int)
     R = np.zeros([batch_size])
 
     print("Starting to Train")
     ##Starts Playing and training
+    updates = 0
     for episodes in range(Max_ep):
         ##Initialize sequence game and sequence s1 pre-process sequence
         obs = np.zeros([m]+list(env.observation_space.shape))
@@ -136,6 +141,7 @@ if __name__ == '__main__':
             D.insert(0,[State0,action,reward,State1])
             if len(D)>replay_size:
                 D.pop()
+            State0 = State1
 
             ##train only every few actions
             if t%4==0:
@@ -148,18 +154,20 @@ if __name__ == '__main__':
                     R[i] = r
                 y_Q = Q.predict_on_batch(S0)
                 y_Q_target = R +gama*np.max(Q_target.predict_on_batch(S1),1)
+                #y_Q_target = R + gama*np.max(Q.predict_on_batch(S1), 1)
                 y_Q[:, A] = y_Q_target
 
                 ##train on batch
                 train_loss = Q.train_on_batch(S0,y_Q)
+                updates += 1
                 pb.update(t, [['mse', train_loss]])
 
             ##set e-greedy policy adjust
             if e > 0.1:
-                e -= 0.0009
+                e -= 0.00009
 
             ##update Q_target every C trains
-            if t and t%C==0:
+            if updates%C==0:
                 Q_target.set_weights(Q.get_weights())
 
             if render:
@@ -170,7 +178,7 @@ if __name__ == '__main__':
 
         pb.target = t
         pb.update(t, [['mse', train_loss]], force=True)
-        Q.save_weights('tst.h5', overwrite=True)
+        Q.save_weights('pong.h5', overwrite=True)
         print("\nEpisode", episodes+1, "\tpoints =", treward, "\tframes",t+1)
         print("")
 
