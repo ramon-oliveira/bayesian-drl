@@ -16,14 +16,14 @@ def preprocess(I):
 
 if __name__ == '__main__':
 
-    episodes = 1
+    episodes = 10
     size = 80  # image size
-    e = 0.00  # e-greedy policy
+    e = 0.05  # e-greedy policy
     k = 1  # the agent sees and selects an action every kth frame
     m = 4  # number of frames looked at each moment
     render = False
     # create enviroment
-    env = gym.make('Pong-v0')
+    env = gym.make('Breakout-v0')
 
     # Initialize action value function with random with random weights
     print("creating Q network")
