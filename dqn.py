@@ -1,13 +1,13 @@
+import sys
+import os
 import gym
 import numpy as np
 from keras.models import Sequential, model_from_yaml
 from keras.layers.core import Dense, Activation, Flatten
 from keras.layers.convolutional import Convolution2D
 from keras.callbacks import Progbar
-import sys
-import os
-
-# import matplotlib.pyplot as plt
+from keras import backend as K
+from keras import objectives
 
 
 def preprocess(I):
@@ -18,6 +18,9 @@ def preprocess(I):
     I[I != 0] = 1 # everything else (paddles, ball) just set to
     return I
 
+
+def clipped_mse(y_true, y_pred):
+    return K.clip(objectives.mean_squared_error(y_true, y_pred), -1, 1)
 
 if __name__ == '__main__':
 
@@ -48,7 +51,7 @@ if __name__ == '__main__':
     terminal_rm = np.zeros([replay_size], dtype=np.bool)
 
     # Initialize action value function with random with random weights
-    print("creating Q network")
+    print('creating Q network')
     Q = Sequential()
     Q.add(Convolution2D(32, 8, 8, border_mode='same', subsample=[4, 4], input_shape=[m, size, size]))
     Q.add(Activation('relu'))
@@ -60,15 +63,15 @@ if __name__ == '__main__':
     Q.add(Dense(512, activation='relu'))
     Q.add(Dense(env.action_space.n, activation='linear', init='zero'))
 
-    print("compiling Q network")
-    Q.compile(loss="mse", optimizer='adadelta')
+    print('compiling Q network')
+    Q.compile(loss=clipped_mse, optimizer='adadelta')
     Q.summary()
 
     if resume and os.path.isfile(game.lower()):
         Q.load_weights(game.lower())
 
     # initialize target action-value function ^Q with same wieghts
-    print("copying Q to Q_target")
+    print('copying Q to Q_target')
     Q_target = model_from_yaml(Q.to_yaml())
     Q_target.set_weights(Q.get_weights())
 
@@ -81,18 +84,20 @@ if __name__ == '__main__':
 
     eh_nois = 0
 
-    print("Starting to Train")
+    print('Starting to Train')
     for episode in range(max_episodes):
         ##Initialize sequence game and sequence s1 pre-process sequence
         obs0 = np.zeros([m, size, size], dtype=np.int8)
         obs1 = np.zeros([m, size, size], dtype=np.int8)
         obs0[:] = obs1[:] = preprocess(env.reset())
 
+        t = 0
         treward = 0
         pb = Progbar(5000)
 
         action = env.action_space.sample()
-        for t in range(max_steps):
+        done = False
+        while not done:
             if (t % k) == 0:
                 if np.random.rand() < e:
                     action = env.action_space.sample()
@@ -138,7 +143,7 @@ if __name__ == '__main__':
                 # train on batch
                 train_loss = Q.train_on_batch(state0_rm[idxs], y_Q)
                 updates += 1
-                pb.update(t, [['mse', train_loss]])
+                pb.update(t, [['clipped_mse', train_loss]])
 
             # update replay idx
             idx_rm = (idx_rm + 1) % replay_size
@@ -154,13 +159,12 @@ if __name__ == '__main__':
             if render:
                 env.render()
 
-            if done:
-                break
+            t += 1
 
         pb.target = t
-        pb.update(t, [['mse', train_loss]], force=True)
+        pb.update(t, [['clipped_mse', train_loss]], force=True)
         if (episode % 100) == 0:
             Q.save_weights(game.lower(), overwrite=True)
-        print("\nEpisode", episode+1, "\tpoints =", treward, "\ttotal frames", steps,
-              "\te-greedy", e)
-        print("")
+
+        stats = 'Episode {0}\t| points {1}\t| episode-frames {2}\t| total-frames {3}\t| e-greedy {4:.2f}\n'
+        print(stats.format(episode+1, treward, t, steps, e))
