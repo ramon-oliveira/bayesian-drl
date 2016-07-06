@@ -4,6 +4,9 @@ from keras.models import Sequential
 from keras.layers.core import Dense, Activation, Flatten
 from keras.layers.convolutional import Convolution2D
 import time
+import sys
+import matplotlib.pyplot as plt
+import seaborn
 
 def preprocess(I):
     I = I[35:195] # crop score bar
@@ -23,7 +26,10 @@ if __name__ == '__main__':
     m = 4  # number of frames looked at each moment
     render = False
     # create enviroment
-    env = gym.make('Breakout-v0')
+    game = sys.argv[1]
+
+    # create enviroment
+    env = gym.make(game)
 
     # Initialize action value function with random with random weights
     print("creating Q network")
@@ -36,37 +42,54 @@ if __name__ == '__main__':
     Q.add(Activation('relu'))
     Q.add(Flatten())
     Q.add(Dense(512, activation='relu'))
-    Q.add(Dense(6, activation='linear', init='zero'))
+    Q.add(Dense(env.action_space.n, activation='linear', init='zero'))
 
     print("compiling Q network")
     Q.compile(loss="mse", optimizer='adadelta')
     Q.summary()
-    Q.load_weights('breakout.h5')
+    Q.load_weights(game.lower())
+
+    labels = env.get_action_meanings() #['NOOP', 'UP', 'DOWN']
+    actions = list(range(env.action_space.n))#[0, 2, 3]
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    width = 0.5
+    li = ax.bar(np.arange(len(actions)), np.zeros(len(actions)), width)
+    # ax.bar(np.arange(env.action_space.n), np.zeros(env.action_space.n), width)
+    ax.set_ylim([-1, 1])
+    ax.set_ylabel('Q value')
+    ax.set_xlabel('Actions')
+    ax.set_xticks(np.arange(len(actions)) + width/2)
+    ax.set_xticklabels(labels)
+    # draw and show it
+    fig.canvas.draw()
+    plt.show(block=False)
 
     for episode in range(episodes):
-        obs0 = np.zeros([m, size, size], dtype=np.int8)
-        obs1 = np.zeros([m, size, size], dtype=np.int8)
-        obs0[:] = obs1[:] = preprocess(env.reset())
-
+        obs = np.zeros([m, size, size], dtype=np.int8)
+        obs[:] = preprocess(env.reset())
+        t = 0
         action = env.action_space.sample()
         done = False
-        t = 0
         while not done:
-            if (t % k) == 0:
-                if np.random.rand() < e:
-                    action = env.action_space.sample()
-                else:
-                    qval = Q.predict(np.array([obs0]), verbose=0)[0]
-                    action = qval.argmax()
-                    print(action, qval)
+            if (t % k) == 0 and  np.random.rand() < e:
+                action = env.action_space.sample()
+            elif (t % k) == 0:
+                qval = Q.predict(np.array([obs]), verbose=0)[0]
+                action = qval.argmax()
+                print(action, qval)
             (ob, reward, done, _info) = env.step(action)
 
             # update state
-            obs1[1:] = obs1[:m-1]
-            obs1[0] = preprocess(ob)
+            obs[1:] = obs[:m-1]
+            obs[0] = preprocess(ob)
 
-            # set last state
-            obs0[:] = obs1[:]
             env.render()
-            time.sleep(0.01)
-            t += 1
+
+            fig.canvas.draw()
+            for i, v in enumerate(qval[actions]):
+                li.patches[i].set_height(v)
+                li.patches[i].set_color('blue')
+            li.patches[np.argmax(qval[actions])].set_color('r')
+
+            time.sleep(0.001)

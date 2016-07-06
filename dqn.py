@@ -4,6 +4,8 @@ from keras.models import Sequential, model_from_yaml
 from keras.layers.core import Dense, Activation, Flatten
 from keras.layers.convolutional import Convolution2D
 from keras.callbacks import Progbar
+import sys
+import os
 
 # import matplotlib.pyplot as plt
 
@@ -31,8 +33,9 @@ if __name__ == '__main__':
     batch_size = 32 # batch size
     gamma = 0.99  #discount factor for future rewards Q function
     C = 10000 # frequency target update
-    render = False
-    game = 'Pong-v0'
+    render = True
+    resume = True
+    game = sys.argv[1]
 
     # create enviroment
     env = gym.make(game)
@@ -60,6 +63,9 @@ if __name__ == '__main__':
     print("compiling Q network")
     Q.compile(loss="mse", optimizer='adadelta')
     Q.summary()
+
+    if resume and os.path.isfile(game.lower()):
+        Q.load_weights(game.lower())
 
     # initialize target action-value function ^Q with same wieghts
     print("copying Q to Q_target")
