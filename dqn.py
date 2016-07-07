@@ -29,14 +29,14 @@ if __name__ == '__main__':
     max_episodes = 10000
     max_steps = 5000 # maximum number of steps per episode
     size = 80  # image size
-    e = 1.0  # e-greedy policy, drops from e=1 to e=0.1
-    k = 4  # the agent sees and selects an action every kth frame
+    e = 0.1  # e-greedy policy, drops from e=1 to e=0.1
+    k = 1  # the agent sees and selects an action every kth frame
     m = 4  # number of frames looked at each moment
     replay_size = 100000 # replay memory size
     batch_size = 32 # batch size
     gamma = 0.99  #discount factor for future rewards Q function
     C = 10000 # frequency target update
-    render = True
+    render = False
     resume = True
     game = sys.argv[1]
 
@@ -68,6 +68,7 @@ if __name__ == '__main__':
     Q.summary()
 
     if resume and os.path.isfile(game.lower()):
+        print('Loading weights from', game)
         Q.load_weights(game.lower())
 
     # initialize target action-value function ^Q with same wieghts
@@ -143,7 +144,11 @@ if __name__ == '__main__':
                 # train on batch
                 train_loss = Q.train_on_batch(state0_rm[idxs], y_Q)
                 updates += 1
-                pb.update(t, [['clipped_mse', train_loss]])
+                pb.add(1, [['clipped_mse', train_loss]])
+
+                # update Q_target every C trains
+                if (updates % C) == 0:
+                    Q_target.set_weights(Q.get_weights())
 
             # update replay idx
             idx_rm = (idx_rm + 1) % replay_size
@@ -151,10 +156,6 @@ if __name__ == '__main__':
             # set e-greedy policy adjust
             if e > 0.1:
                 e -= 0.0000009
-
-            # update Q_target every C trains
-            if (updates % C) == 0:
-                Q_target.set_weights(Q.get_weights())
 
             if render:
                 env.render()

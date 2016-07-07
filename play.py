@@ -8,6 +8,7 @@ import sys
 import matplotlib.pyplot as plt
 import seaborn
 
+
 def preprocess(I):
     I = I[35:195] # crop score bar
     I = I[::2, ::2, 0] # down sampling
@@ -21,11 +22,10 @@ if __name__ == '__main__':
 
     episodes = 10
     size = 80  # image size
-    e = 0.05  # e-greedy policy
+    e = 0.00  # e-greedy policy
     k = 1  # the agent sees and selects an action every kth frame
     m = 4  # number of frames looked at each moment
-    render = False
-    # create enviroment
+    plot = False
     game = sys.argv[1]
 
     # create enviroment
@@ -49,21 +49,23 @@ if __name__ == '__main__':
     Q.summary()
     Q.load_weights(game.lower())
 
-    labels = env.get_action_meanings() #['NOOP', 'UP', 'DOWN']
-    actions = list(range(env.action_space.n))#[0, 2, 3]
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
-    width = 0.5
-    li = ax.bar(np.arange(len(actions)), np.zeros(len(actions)), width)
-    # ax.bar(np.arange(env.action_space.n), np.zeros(env.action_space.n), width)
-    ax.set_ylim([-1, 1])
-    ax.set_ylabel('Q value')
-    ax.set_xlabel('Actions')
-    ax.set_xticks(np.arange(len(actions)) + width/2)
-    ax.set_xticklabels(labels)
-    # draw and show it
-    fig.canvas.draw()
-    plt.show(block=False)
+    if plot:
+        labels = env.get_action_meanings() #['NOOP', 'UP', 'DOWN']
+        actions = list(range(env.action_space.n))#[0, 2, 3]
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        width = 0.5
+        li = ax.bar(np.arange(len(actions)), np.zeros(len(actions)), width)
+        # ax.bar(np.arange(env.action_space.n), np.zeros(env.action_space.n), width)
+        ax.set_ylim([-1, 2])
+        ax.set_ylabel(game.upper())
+        ax.set_ylabel('Q value')
+        ax.set_xlabel('Actions')
+        ax.set_xticks(np.arange(len(actions)) + width/2)
+        ax.set_xticklabels(labels)
+        # draw and show it
+        fig.canvas.draw()
+        plt.show(block=False)
 
     for episode in range(episodes):
         obs = np.zeros([m, size, size], dtype=np.int8)
@@ -86,10 +88,11 @@ if __name__ == '__main__':
 
             env.render()
 
-            fig.canvas.draw()
-            for i, v in enumerate(qval[actions]):
-                li.patches[i].set_height(v)
-                li.patches[i].set_color('blue')
-            li.patches[np.argmax(qval[actions])].set_color('r')
-
-            time.sleep(0.001)
+            if plot:
+                fig.canvas.draw()
+                for i, v in enumerate(qval[actions]):
+                    li.patches[i].set_height(v)
+                    li.patches[i].set_color('blue')
+                li.patches[np.argmax(qval[actions])].set_color('r')
+            else:
+                time.sleep(0.01)
