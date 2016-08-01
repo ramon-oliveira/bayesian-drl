@@ -8,10 +8,17 @@ from keras.layers.convolutional import Convolution2D
 from keras.callbacks import Progbar
 from keras import backend as K
 from keras import objectives
+import matplotlib.pyplot as plt
 
+
+actions_pong = [0, 2, 3]
+actions_meanings_pong = ['NOOP', 'UP', 'DOWN']
+
+actions_breakout = [0, 1, 2, 3]
+actions_meanings_breakout = ['NOOP', 'FIRE', 'RIGTH', 'LEFT']
 
 def preprocess(I):
-    I = I[35:195] # crop score bar
+    # I = I[35:195] # crop score bar
     I = I[::2, ::2, 0] # down sampling
     I[I == 144] = 0 # erase background (background type 1)
     I[I == 109] = 0 # erase background (background type 2)
@@ -20,40 +27,51 @@ def preprocess(I):
 
 
 def clipped_mse(y_true, y_pred):
-    return K.clip(objectives.mean_squared_error(y_true, y_pred), -1, 1)
+    return K.clip(objectives.mean_squared_error(y_true, y_pred), -1.0, 1.0)
 
 if __name__ == '__main__':
 
     # parameters
-    total_frames = 10000000
-    max_episodes = 10000
-    max_steps = 5000 # maximum number of steps per episode
-    size = 80  # image size
-    e = 0.1  # e-greedy policy, drops from e=1 to e=0.1
-    k = 1  # the agent sees and selects an action every kth frame
+    max_episodes = 100000
+    heigth = 105
+    width = 80
+    e = 1.0  # e-greedy policy, drops from e=1 to e=0.1
+    k = 4  # the agent sees and selects an action every kth frame
     m = 4  # number of frames looked at each moment
-    replay_size = 100000 # replay memory size
+    replay_size = 500000 # replay memory size
     batch_size = 32 # batch size
     gamma = 0.99  #discount factor for future rewards Q function
-    C = 10000 # frequency target update
+    C = 10000 # frequency target network update
     render = False
-    resume = True
+    resume = False
     game = sys.argv[1]
 
     # create enviroment
     env = gym.make(game)
 
+    if 'pong' in game.lower():
+        actions = np.array(actions_pong)
+        actions_meanings = actions_meanings_pong
+    elif 'breakout' in game.lower():
+        actions = np.array(actions_breakout)
+        actions_meanings = actions_meanings_breakout
+    else:
+        actions = np.arange(env.action_space.n)
+        actions_meanings = env.get_action_meanings()
+
+    print('Actions:', actions_meanings)
+
     # populates replay memory with some random sequences
-    state0_rm = np.zeros([replay_size, m, size, size], dtype=np.int8)
+    state0_rm = np.zeros([replay_size, m, heigth, width], dtype=np.int8)
     action_rm = np.zeros([replay_size], dtype=np.int8)
     reward_rm = np.zeros([replay_size], dtype=np.int8)
-    state1_rm = np.zeros([replay_size, m, size, size], dtype=np.int8)
+    state1_rm = np.zeros([replay_size, m, heigth, width], dtype=np.int8)
     terminal_rm = np.zeros([replay_size], dtype=np.bool)
 
     # Initialize action value function with random with random weights
     print('creating Q network')
     Q = Sequential()
-    Q.add(Convolution2D(32, 8, 8, border_mode='same', subsample=[4, 4], input_shape=[m, size, size]))
+    Q.add(Convolution2D(32, 8, 8, border_mode='same', subsample=[4, 4], input_shape=[m, heigth, width]))
     Q.add(Activation('relu'))
     Q.add(Convolution2D(64, 4, 4, border_mode='same', subsample=[2, 2]))
     Q.add(Activation('relu'))
@@ -61,7 +79,7 @@ if __name__ == '__main__':
     Q.add(Activation('relu'))
     Q.add(Flatten())
     Q.add(Dense(512, activation='relu'))
-    Q.add(Dense(env.action_space.n, activation='linear', init='zero'))
+    Q.add(Dense(len(actions), activation='linear'))
 
     print('compiling Q network')
     Q.compile(loss=clipped_mse, optimizer='adadelta')
@@ -81,31 +99,30 @@ if __name__ == '__main__':
     updates = 0
     idx_rm = 0
     steps = 0
-    idxs_rm = list(range(replay_size))
+    idxs_rm = np.arange(replay_size)
+    idxs_batch = np.arange(batch_size)
 
-    eh_nois = 0
+    nb_active_rm = 0
 
     print('Starting to Train')
     for episode in range(max_episodes):
-        ##Initialize sequence game and sequence s1 pre-process sequence
-        obs0 = np.zeros([m, size, size], dtype=np.int8)
-        obs1 = np.zeros([m, size, size], dtype=np.int8)
+        obs0 = np.zeros([m, heigth, width], dtype=np.int8)
+        obs1 = np.zeros([m, heigth, width], dtype=np.int8)
         obs0[:] = obs1[:] = preprocess(env.reset())
 
         t = 0
         treward = 0
         pb = Progbar(5000)
 
-        action = env.action_space.sample()
         done = False
         while not done:
             if (t % k) == 0:
                 if np.random.rand() < e:
-                    action = env.action_space.sample()
+                    action_idx = np.random.randint(low=0, high=len(actions))
                 else:
                     qval = Q.predict(np.array([obs0]), verbose=0)
-                    action = qval.argmax()
-            (ob, reward, done, _info) = env.step(action)
+                    action_idx = qval.argmax()
+            ob, reward, done, info = env.step(actions[action_idx])
             steps += 1
 
             # update state
@@ -116,51 +133,44 @@ if __name__ == '__main__':
 
             # save replay memory
             state0_rm[idx_rm] = obs0[:]
-            action_rm[idx_rm] = action
+            action_rm[idx_rm] = action_idx
             reward_rm[idx_rm] = reward
             state1_rm[idx_rm] = obs1[:]
             terminal_rm[idx_rm] = int(done)
 
+            # if t % 100 == 0:
+            #     plt.imsave('obs.png', np.concatenate(obs0, axis=1), cmap=plt.cm.binary)
+
             # set last state
             obs0[:] = obs1[:]
 
-            # if t % 50 == 0:
-            #     plt.imsave('tst.png', np.concatenate(obs0, axis=1), cmap=plt.cm.binary)
+            nb_active_rm = min(nb_active_rm + 1, replay_size)
 
-            eh_nois = min(eh_nois + 1, replay_size)
-
-            if eh_nois >= batch_size and (t % k) == 0:
+            if nb_active_rm >= batch_size and (t % k) == 0:
                 # sample random minibatch of transitions from D
-                idxs = np.random.choice(idxs_rm[:eh_nois], size=batch_size)
+                idxs = np.random.choice(idxs_rm[:nb_active_rm], size=batch_size)
 
                 qamax = np.max(Q_target.predict(state1_rm[idxs]), axis=1)
                 y_Q = Q.predict(state0_rm[idxs])
                 y_Q_target = reward_rm[idxs] + (1.0-terminal_rm[idxs])*gamma*qamax
-
-                # print(qamax.shape, y_Q.shape, y_Q_target.shape)
-                for i, a in enumerate(action_rm[idxs]):
-                    y_Q[i, a] = y_Q_target[i]
+                y_Q[idxs_batch, action_rm[idxs]] = y_Q_target
 
                 # train on batch
                 train_loss = Q.train_on_batch(state0_rm[idxs], y_Q)
                 updates += 1
-                pb.add(1, [['clipped_mse', train_loss]])
+                pb.add(k, [['clipped_mse', train_loss]])
 
                 # update Q_target every C trains
                 if (updates % C) == 0:
                     Q_target.set_weights(Q.get_weights())
 
+                # set e-greedy policy adjust
+                e = max(e - 0.0000009, 0.1)
+
             # update replay idx
             idx_rm = (idx_rm + 1) % replay_size
-
-            # set e-greedy policy adjust
-            if e > 0.1:
-                e -= 0.0000009
-
-            if render:
-                env.render()
-
             t += 1
+            if render: env.render()
 
         pb.target = t
         pb.update(t, [['clipped_mse', train_loss]], force=True)
