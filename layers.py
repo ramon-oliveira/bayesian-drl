@@ -39,7 +39,7 @@ class Bayesian(Layer):
         return (input_shape[0], self.output_dim)
 
 
-class PoorBayesian(Layer):
+class OSBayesian(Layer):
 
     """Efficient Bayesian layer (only one weights sample per mini batch)"""
 
@@ -47,7 +47,7 @@ class PoorBayesian(Layer):
         self.output_dim = output_dim
         self.mean_prior = mean_prior
         self.std_prior = std_prior
-        super(PoorBayesian, self).__init__(**kwargs)
+        super(OSBayesian, self).__init__(**kwargs)
 
     def build(self, input_shape):
         input_dim = input_shape[1]
@@ -90,12 +90,12 @@ class ProbabilisticDropout(Layer):
         return dict(list(base_config.items()) + list(config.items()))
 
 
-class PoorBayesianConvolution2D(Convolution2D):
+class OSBayesianConvolution2D(Convolution2D):
 
     def __init__(self, mean_prior, std_prior, *args, **kwargs):
         self.mean_prior = mean_prior
         self.std_prior = std_prior
-        super(PoorBayesianConvolution2D, self).__init__(*args, **kwargs)
+        super(OSBayesianConvolution2D, self).__init__(*args, **kwargs)
 
     def build(self, input_shape):
         if self.dim_ordering == 'th':
