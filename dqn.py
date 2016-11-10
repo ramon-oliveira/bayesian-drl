@@ -212,10 +212,10 @@ def train(args, game_config):
                     fname = 'weights/{0}/updates_{1}.h5'.format(args.game, model_updates)
                     model.save_weights(fname)
 
-                # set e-greedy policy adjust
-                epsilon = max(epsilon - epsilon_reduction, args.final_epsilon)
 
             t += 1
+            epsilon = max(epsilon - epsilon_reduction, args.final_epsilon)
+
             pbar_episode.total = max(pbar_episode.total, t)
             pbar_episode.set_description('{0:4d}   reward'.format(int(treward)))
             pbar_episode.update(1)
