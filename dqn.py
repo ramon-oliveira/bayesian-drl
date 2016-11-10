@@ -25,7 +25,7 @@ parser.add_argument('--model', dest='model', required=True,
 parser.add_argument('--render', dest='render', action='store_true')
 
 parser.add_argument('--batch-size', dest='batch_size', type=int, default=32)
-parser.add_argument('--replay-size', dest='replay_size', type=int, default=10000)
+parser.add_argument('--replay-size', dest='replay_size', type=int, default=500000)
 parser.add_argument('--nb-batch', dest='nb_batch', type=int, default=64)
 parser.add_argument('--nb-frame', dest='nb_frame', type=int, default=10000000,
                     help='number of frames the network is trained on')
