@@ -1,50 +1,10 @@
-import os
-import sys
 import gym
 import tqdm
-import argparse
-import pickle as pkl
 import numpy as np
-from keras import backend as K
-from keras import objectives
-from keras.models import Sequential, model_from_yaml
-from keras.layers import Dense
-from keras.layers import Activation
-from keras.layers import Flatten
-from keras.layers import Convolution2D
-from keras.utils.generic_utils import Progbar
-from layers import OSBayesian, OSBayesianConvolution2D
-import objectives
 import utils
-
-parser = argparse.ArgumentParser(description='Atari2600 DQN experiments.')
-parser.add_argument('--game', dest='game', required=True,
-                    choices=['pong', 'breakout', 'space-invaders'])
-parser.add_argument('--model', dest='model', required=True,
-                    choices=['maximum-likelihood', 'onesample-bayesian'])
-parser.add_argument('--render', dest='render', action='store_true')
-parser.add_argument('--resume', dest='resume', action='store_true')
-parser.add_argument('--weights-file', dest='weights_file')
-
-parser.add_argument('--batch-size', dest='batch_size', type=int, default=32)
-parser.add_argument('--replay-size', dest='replay_size', type=int, default=500000)
-parser.add_argument('--nb-batch', dest='nb_batch', type=int, default=64)
-parser.add_argument('--nb-frame', dest='nb_frame', type=int, default=10000000,
-                    help='number of frames the network is trained on')
-parser.add_argument('--C', dest='C', type=int, default=10000,
-                    help='target network update frequency')
-parser.add_argument('--frame-skip', dest='frame_skip', type=int, default=4,
-                    help='skip frames this many times after the agent select an action')
-parser.add_argument('--nb-frame-state', dest='nb_frame_state', type=int, default=4,
-                    help='number of frames to compose the state')
-parser.add_argument('--update-frequency', dest='update_frequency', type=int, default=4,
-                    help='number of actions made by the agente between updates')
-parser.add_argument('--gamma', dest='gamma', type=float, default=0.99,
-                    help='discount factor in Q-learning')
-parser.add_argument('--initial-epsilon', dest='initial_epsilon', type=float, default=1.0)
-parser.add_argument('--final-epsilon', dest='final_epsilon', type=float, default=0.1)
-parser.add_argument('--final-epsilon-annealing', dest='final_epsilon_annealing',
-                    type=int, default=1000000)
+from config import args
+from models import create_model
+from keras.models import model_from_yaml
 
 
 def game_config(args):
@@ -72,59 +32,6 @@ def game_config(args):
         'state_shape': screen,
         'preprocessing': utils.preprocessing,
     }
-
-
-def get_newest_file(path):
-    return max([os.path.join(path, f) for f in os.listdir(path)], key=os.path.getctime)
-
-def create_model(args, game_config):
-    input_shape = game_config['state_shape']
-    output_dim = len(game_config['actions'])
-    model = Sequential()
-    if args.model == 'maximum-likelihood':
-        model.add(Convolution2D(32, 8, 8, border_mode='same', subsample=[4, 4],
-                                input_shape=input_shape))
-        model.add(Activation('relu'))
-        model.add(Convolution2D(64, 4, 4, border_mode='same', subsample=[2, 2]))
-        model.add(Activation('relu'))
-        model.add(Convolution2D(64, 3, 3, border_mode='same', subsample=[1, 1]))
-        model.add(Activation('relu'))
-        model.add(Flatten())
-        model.add(Dense(512))
-        model.add(Activation('relu'))
-        model.add(Dense(output_dim, activation='linear'))
-        loss = 'mse'
-    elif args.model == 'onesample-bayesian':
-        mean_prior = 0.0
-        std_prior = 0.05
-        model.add(OSBayesianConvolution2D(mean_prior, std_prior, 32, 8, 8,
-                                                 border_mode='same', subsample=[4, 4],
-                                                 input_shape=input_shape))
-        model.add(Activation('relu'))
-        model.add(OSBayesianConvolution2D(mean_prior, std_prior, 64, 4, 4,
-                                                 border_mode='same', subsample=[2, 2]))
-        model.add(Activation('relu'))
-        model.add(OSBayesianConvolution2D(mean_prior, std_prior, 64, 3, 3,
-                                                 border_mode='same', subsample=[1, 1]))
-        model.add(Activation('relu'))
-        model.add(Flatten())
-        model.add(OSBayesian(512, mean_prior, std_prior))
-        model.add(Activation('relu'))
-        model.add(OSBayesian(output_dim, mean_prior, std_prior))
-        loss = objectives.explicit_bayesian_loss(model, mean_prior, std_prior,
-                                                 batch_size, nb_batch)
-
-    else:
-        raise Exception('Unknown model type: {0}'.format(args.model))
-    model.compile(loss=loss, optimizer='adam')
-
-    if args.weights_file is not None:
-        model.load_weights(args.weights_file)
-    elif args.resume:
-        f = 'weights/{0}/{1}'.format(args.game, args.model)
-        model.load_weights(get_newest_file(f))
-
-    return model
 
 
 def train(args, game_config):
@@ -245,6 +152,5 @@ def train(args, game_config):
 
 
 if __name__ == '__main__':
-    args = parser.parse_args(sys.argv[1:])
     game_config = game_config(args)
     train(args, game_config)

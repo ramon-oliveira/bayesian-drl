@@ -4,3 +4,4 @@
 *-v0
 __pycache__/
 .DS_Store
+*.ipynb
