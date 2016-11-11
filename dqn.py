@@ -23,6 +23,8 @@ parser.add_argument('--game', dest='game', required=True,
 parser.add_argument('--model', dest='model', required=True,
                     choices=['maximum-likelihood', 'onesample-bayesian'])
 parser.add_argument('--render', dest='render', action='store_true')
+parser.add_argument('--resume', dest='resume', action='store_true')
+parser.add_argument('--weights-file', dest='weights_file')
 
 parser.add_argument('--batch-size', dest='batch_size', type=int, default=32)
 parser.add_argument('--replay-size', dest='replay_size', type=int, default=500000)
@@ -72,6 +74,9 @@ def game_config(args):
     }
 
 
+def get_newest_file(path):
+    return max([os.path.join(path, f) for f in os.listdir(path)], key=os.path.getctime)
+
 def create_model(args, game_config):
     input_shape = game_config['state_shape']
     output_dim = len(game_config['actions'])
@@ -112,6 +117,12 @@ def create_model(args, game_config):
     else:
         raise Exception('Unknown model type: {0}'.format(args.model))
     model.compile(loss=loss, optimizer='adam')
+
+    if args.weights_file is not None:
+        model.load_weights(args.weights_file)
+    elif args.resume:
+        model.load_weights(get_newest_file('weights/{0}/{1}'.+args.game))
+
     return model
 
 

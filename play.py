@@ -133,12 +133,12 @@ def play(args, game_config):
     done = False
     obs = np.zeros(state_shape, dtype=np.int8)
     while not done:
-        # if (t % args.frame_skip) == 0:
-        #     if np.random.rand() < epsilon:
-        #         action_idx = np.random.randint(low=0, high=len(actions))
-        #     else:
-        qval = model.predict(np.array([obs]), verbose=0)
-        action_idx = qval.argmax()
+        if (t % args.frame_skip) == 0:
+            if np.random.rand() < epsilon:
+                action_idx = np.random.randint(low=0, high=len(actions))
+            else:
+                qval = model.predict(np.array([obs]), verbose=0)
+                action_idx = qval.argmax()
 
         ob, reward, done, info = env.step(actions[action_idx])
 
