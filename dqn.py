@@ -121,7 +121,8 @@ def create_model(args, game_config):
     if args.weights_file is not None:
         model.load_weights(args.weights_file)
     elif args.resume:
-        model.load_weights(get_newest_file('weights/{0}/{1}'.+args.game))
+        f = 'weights/{0}/{1}'.format(args.game, args.model)
+        model.load_weights(get_newest_file(f))
 
     return model
 
